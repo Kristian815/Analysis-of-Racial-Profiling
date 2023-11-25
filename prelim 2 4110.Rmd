@@ -1,0 +1,76 @@
+---
+title: "prelim 2 4110"
+output: pdf_document
+date: '2022-11-10'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r cars}
+police.data  <- read.csv("policing2.csv")
+police.data $race<-ifelse(police.data $race=="White",1,0)
+police.data $sex<-ifelse(police.data $sex=="Male",1,0)
+police.data $employed<-ifelse(police.data $employed=="Yes",1,0)
+police.data $citizen<-ifelse(police.data $citizen=="Yes",1,0)
+as.factor(police.data$prior.traffic)
+police.data 
+fulllogit <- glm(held ~  race+sex + prior.traffic+region + year + age+ employed + citizen + databases,data = police.data , family = "binomial")
+summary(fulllogit)
+reduced1 <- glm(held ~  race + employed + citizen + databases,data = police.data , family = "binomial")
+reduced2 <- glm(held ~  citizen+employed + race*age+databases,data = police.data , family = "binomial")
+yprobs1 <- fitted(reduced2)
+plot.roc(police.data $held, yprobs1, print.auc = TRUE)
+
+agevheld = length(police.data $age)
+success1 = factor(cut(police.data $age,c(seq(0, 125, by=5)))) 
+success.rate1 = tapply(police.data $held,success1,mean)
+success.rate1
+plot(success.rate1)
+
+agevdatabase = length(police.data $age)
+success2 = factor(cut(police.data $age,c(seq(0, 70, by=5)))) 
+success.rate2 = tapply(police.data $databases,success2,mean)
+success.rate2
+plot(success.rate2)
+
+databasevheld = length(police.data $database)
+success3 = factor(cut(police.data $databases,c(seq(0, max(police.data $databases)+1, by=2)))) 
+success.rate3 = tapply(police.data $held,success3, mean)
+success.rate3
+plot(success.rate3)
+
+databasevpriortraffic = length(police.data $database)
+success4 = factor(cut(police.data $databases,c(seq(0, max(police.data $databases)+1, by=2)))) 
+success.rate4 = tapply(police.data $prior.traffic,success4, mean)
+success.rate4
+plot(success.rate4)
+confint(reduced1)
+
+pred <- predict(reduced2, police.data, type = "response")
+   
+# Changing probabilities
+pred_label <- ifelse(pred > 0.5, 1, 0)
+error <- mean(pred_label != police.data$held)
+
+# Evaluating model accuracy using confusion matrix
+t <- table(police.data$held, pred_label)
+
+sensitivity <- sensitivity(t)
+specificity <- specificity(t)
+print(paste('sensitivity on positive example is: ', sensitivity))
+print(paste('specificity on negative example is: ', specificity))
+print(paste('Overall Accuracy is: ', 1 - error ))
+
+maledata <- police.data[police.data$sex == 1, ]
+femaledata <- police.data[police.data$sex == 0, ]
+malemodel <- glm(held ~  race + prior.traffic+region + year + age+ employed + citizen + databases,data = maledata , family = "binomial")
+femalemodel <- glm(held ~  race + prior.traffic+region + year + age+ employed + citizen + databases,data = femaledata , family = "binomial")
+summary(malemodel)
+summary(femalemodel)
+```
+plot2: Check for sampling bias for our data. Between age and database. 
+

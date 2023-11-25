@@ -1,0 +1,429 @@
+---
+title: "STSCI 5160 Prelim 2"
+author: "Minghan Liang"
+date: "11/9/2022"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Analysis of Arrests for Marijuana Possession
+
+When a person is arrested for a charge of simple possession of a small amount of marijuana, the police may use their discretion for whether the arrestee may be released with a summons to appear in court (similar to what a person may have with a parking ticket) or whether they receive a harsher treatment such as being detained at the police station or held in jail.
+
+The data in this study were collected from 5140 individuals who were arrested for possession of a small amount of marijuana during the time period from 2001 to 2006, in a major American city. The data file is named “policing2.csv”.
+
+The objective of this assignment is two-fold:
+
+1) You should analyze and determine which factors might be predictive of the harsher treatment of being held at the jail or police station after arrest. You should also evaluate and quantify how those factors increase or decrease the risk of being held.
+
+2) As part of this analysis, you should specifically address whether or not there is evidence of racial profiling, which is defined as different treatment as a function of race. In this analysis, you should be able to determine the effect of race, when adjusting for other factors.
+
+1. EDA
+    - Histograms: number of held vs predictors (i.e. if histogram shows strong differences, then test of association might help to distinguish whether )
+
+### Stage 1: Explorative Data Analysis
+
+```{r}
+# Import all necessary packages
+#library(lmtest)
+library(ggplot2)
+# Load Data
+data_path <- '/Users/jamesliang/Desktop/Fall 2022/STSCI 5160/Prelim 2/policing2_final.csv'
+police.data = data.frame(read.csv(data_path))
+View(police.data)
+
+```
+
+### 1.1： Investigate distribution of treatments on different predictors
+
+**Answer**:
+
+```{r}
+# create a function that plot histogram of treatments vs different levels of a predictor
+# effect: sex
+ggplot(police.data, aes(x=held, group=sex, fill=sex))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+# effect: race
+ggplot(police.data, aes(x=held, group=race, fill=race))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+# effect: prior traffic record
+ggplot(police.data, aes(x=held, group=prior.traffic, fill=prior.traffic))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+# effect: region
+ggplot(police.data, aes(x=held, group=region, fill=region))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+# effect: employment
+ggplot(police.data, aes(x=held, group=employed, fill=employed))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+# effect: citizenship
+ggplot(police.data, aes(x=held, group=citizen, fill=citizen))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+# effect: database
+ggplot(police.data, aes(x=held, group=databases, fill=databases))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+# effect: year
+ggplot(police.data, aes(x=held, group=year, fill=year))+ geom_histogram(position="dodge",binwidth=0.25)+theme_bw()
+
+```
+
+## Functions for regression analysis and contingency analysis & visualizations
+
+```{r}
+# 0. Import all libraries
+library(pROC)
+library(caret)
+
+####### 1. show_mosaic function
+show_mosaic <- function(target, criteria, dimnames) {
+a1 <- aggregate(target, by=list(Category=criteria), FUN=sum)
+a2 <- aggregate(target, by=list(Category=criteria), FUN=length)
+a <- merge(a1, a2, by='Category')
+colnames(a) <- c('class','held', 'total')
+a$not_held <-  a$total - a$held
+a_final <- a[,c(2,4)]
+#print(a)
+
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- dimnames
+print(data.mat)
+
+par(las=1)
+
+spineplot(t(data.mat),
+          col=c("blue","yellow"),
+          main = "Relationship between being held and our predictor")
+}
+
+####### 2. Label Prediction & Result Evaluation Function
+make_prediction <- function(model, threshold) {
+pred <- predict(model, police.data, type = "response")
+   
+# Changing probabilities
+pred_label <- ifelse(pred > threshold, 1, 0)
+error <- mean(pred_label != police.data$held)
+
+# Evaluating model accuracy using confusion matrix
+t <- table(police.data$held, pred_label)
+
+#precision <- t[4] /(t[4] + t[3])
+#recall <- t[4] /(t[4] + t[2])
+#print(paste('Precision of positive example is: ', precision))
+#print(paste('Recall of positive example is: ', recall))
+#print(paste('f1 is: ', 2*precision*recall / (precision + recall)))
+
+sensitivity <- sensitivity(t)
+specificity <- specificity(t)
+print(paste('sensitivity on positive example is: ', sensitivity))
+print(paste('specificity on negative example is: ', specificity))
+print(paste('Overall Accuracy is: ', 1 - error ))
+
+}
+
+####### 3. ROC Curve function
+plot_roc <- function(model) {
+yprobs1 <- fitted(model)
+plot.roc(police.data$held, yprobs1, print.auc = TRUE, xlim = c(1, 0), ylim =c(0,1))
+}
+```
+
+
+```{r}
+# held vs race
+show_mosaic(police.data$held, police.data$race, list(held=c('Yes','No'), race=c('Black','White')))
+
+# held vs gender
+show_mosaic(police.data$held, police.data$sex, list(held=c('Yes','No'), sex=c('Female','Male')))
+
+# held vs employment
+show_mosaic(police.data$held, police.data$employed, list(held=c('Yes','No'), employed=c('No','Yes')))
+
+# held vs citizenship
+show_mosaic(police.data$held, police.data$citizen, list(held=c('Yes','No'), citizen=c('No','Yes')))
+#spineplot(factor(held) ~ sex, main='Held proportion by gender', col = c('blue','yellow'), data=police.data)
+```
+
+# Investigation on racial profiling
+
+Step 1: General Contingency Analysis on Held vs Race : Is Race factor associated with the "held" factor (i.e. whether race is associated with probability of being hold), if we use the whole dataset WITHOUT any filtering (i.e. judging from a comprehensive perspective WITHOUT holding other factors in the dataset fixed or similar)
+
+**Result**:
+The calculated p-value for the chi-square test statistic is < 2.2e-16 << 0.05, so we reject the Null and conclude that the race and Chance of being held (with marijuana) are associated with each other, based on contingency test.
+
+Note: This is result maybe biased, since we didn't controled for other factors.
+
+```{r}
+a1 <- aggregate(police.data$held, by=list(Category=police.data$race), FUN=sum)
+a2 <- aggregate(police.data$held, by=list(Category=police.data$race), FUN=length)
+a <- merge(a1, a2, by='Category')
+colnames(a) <- c('class','held', 'total')
+a$not_held <-  a$total - a$held
+a_final <- a[,c(2,4)]
+print(a)
+
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+
+chisq.test(data.mat)
+
+```
+
+Step 2: Contingency Analysis on Held vs Race, controlling sex and employment factor: Is Race factor associated with the "held" factor (i.e. whether race is associated with probability of being hold), if we hold sex and employment factor "fixed" (i.e. sort data into different criteria based on sex and employment factor, there are 2*2 = 4 different sub groups considering sex and employment factor)
+
+**Result**:
+The calculated p-value for the chi-square test statistic are SIGNIFICANT for **Male group** (both employed and unemployed), so we reject the Null and conclude that the race and Chance of being held (with marijuana) are associated with each other based on contingency test, holding other sex (=male) and employment factor fixed.
+
+
+```{r}
+criteria <- list(police.data$race, police.data$sex, police.data$employed)
+a1 <- aggregate(police.data$held, by=criteria, FUN=sum)
+a2 <- aggregate(police.data$held, by=criteria, FUN=length)
+a <- merge(a1, a2, by=c('Group.1','Group.2','Group.3'))
+colnames(a) <- c('race','sex','employed','held', 'total')
+a$not_held <-  a$total - a$held
+print(a)
+```
+
+```{r}
+# female, employed
+a_final <- a[(a$sex == 'Female')&(a$employed == 'Yes'),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+print('Test for Female, employed')
+chisq.test(data.mat)
+
+# female, unemployed
+a_final <- a[(a$sex == 'Female')&(a$employed == 'No'),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+print('Test for Female, unemployed')
+chisq.test(data.mat)
+```
+
+```{r}
+# male, employed
+a_final <- a[(a$sex == 'Male')&(a$employed == 'Yes'),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+# male, unemployed
+a_final <- a[(a$sex == 'Male')&(a$employed == 'No'),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+```
+
+
+Step 3: Contingency Analysis on Held vs Race, controlling Age (0-18,19-22,23+) and database (0, 1+) factor factor: Is Race factor associated with the "held" factor (i.e. whether race is associated with probability of being hold), controlling Age group and database factor (i.e. sort data into different criteria based on age and database factor, there are 2*2 = 4 different sub groups considering sex and employment factor) 
+
+We are interested in the following criterias (subgroups):
+- Age:
+  - Juvenile (0-18)
+  - College (19-22)
+  - after College (23+)
+- Database (previous conviction records):
+  - Clean (0)
+  - Not-clean (1+)
+
+**Result**:
+The calculated p-value for the chi-square test statistic are SIGNIFICANT for **Male group** (both employed and unemployed), so we reject the Null and conclude that the race and Chance of being held (with marijuana) are associated with each other based on contingency test, holding other sex (=male) and employment factor fixed.
+
+```{r}
+# Use dummy encoding to perform binning on data: Age: 0-Juvenile, 1-College, 2-after College / Database: 0-Clean, 1-Not-clean
+dum_data <- police.data
+
+# Age factor
+dum_data['age'][dum_data['age'] <= 18] <- 0
+dum_data['age'][(dum_data['age'] >= 19) & (dum_data['age'] <= 22)] <- 1
+dum_data['age'][(dum_data['age'] >= 23)] <- 2
+
+# database factor
+dum_data['databases'][dum_data['databases'] == 0] <- 0
+dum_data['databases'][dum_data['databases'] > 0] <- 1
+
+# perform aggregation
+criteria <- list(dum_data$race, dum_data$age, dum_data$databases)
+a1 <- aggregate(dum_data$held, by=criteria, FUN=sum)
+a2 <- aggregate(dum_data$held, by=criteria, FUN=length)
+a <- merge(a1, a2, by=c('Group.1','Group.2','Group.3'))
+colnames(a) <- c('race','age','databases','held', 'total')
+a$not_held <-  a$total - a$held
+print(a)
+
+```
+
+```{r}
+# age < 18, database = 0 (no any conviction)
+a_final <- a[(a$age == 0)&(a$database == 0),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+# 19 <= age <= 22, database = 0 (no any conviction)
+a_final <- a[(a$age == 1)&(a$database == 0),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+# 23 < age, database = 2 (no any conviction)
+a_final <- a[(a$age == 2)&(a$database == 0),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+```
+
+```{r}
+# age < 18, database = 1 (has previous conviction)
+a_final <- a[(a$age == 0)&(a$database == 1),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+# 19 <= age <= 22, database = 1 (has previous conviction)
+a_final <- a[(a$age == 1)&(a$database == 1),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+# 23 < age, database = 1 (has previous conviction)
+a_final <- a[(a$age == 2)&(a$database == 1),c(4,6)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+```
+
+Step 4: race and region
+
+```{r}
+# Use dummy encoding to perform binning on data: Age: 0-Juvenile, 1-College, 2-after College / Database: 0-Clean, 1-Not-clean
+dum_data <- police.data
+
+# Age factor
+#dum_data['age'][dum_data['age'] <= 18] <- 0
+#dum_data['age'][(dum_data['age'] >= 19) & (dum_data['age'] <= 22)] <- 1
+#dum_data['age'][(dum_data['age'] >= 23)] <- 2
+
+# database factor
+#dum_data['databases'][dum_data['databases'] == 0] <- 0
+#dum_data['databases'][dum_data['databases'] > 0] <- 1
+
+# perform aggregation
+criteria <- list(dum_data$race, dum_data$region)
+a1 <- aggregate(dum_data$held, by=criteria, FUN=sum)
+a2 <- aggregate(dum_data$held, by=criteria, FUN=length)
+a <- merge(a1, a2, by=c('Group.1','Group.2'))
+colnames(a) <- c('race','region','held','total')
+a$not_held <-  a$total - a$held
+print(a)
+
+```
+
+```{r}
+a_final <- a[(a$region == 'East'),c(3,5)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+a_final <- a[(a$region == 'North'),c(3,5)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+a_final <- a[(a$region == 'South'),c(3,5)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+
+a_final <- a[(a$region == 'West'),c(3,5)]
+data.mat = as.matrix(a_final)
+dimnames(data.mat) <- list(race=c('Black','White'), held=c('Yes','No'))
+print(data.mat)
+chisq.test(data.mat)
+```
+
+
+
+```{r}
+dum <- police.data
+dum$prior.traffic<-ifelse(dum$prior.traffic != 0,1,0)
+
+full_model <- glm(held ~ race + sex + prior.traffic + region + employed + citizen + databases + year + age,
+                  family = 'binomial', data= police.data)
+
+make_prediction(full_model, 0.5)
+#plot_roc(full_model)
+```
+
+```{r}
+model_3 <- glm(held ~ race + employed + databases,  family = 'binomial', data= police.data)
+summary(model_3)
+
+make_prediction(model_3, 0.5)
+plot_roc(model_3)
+```
+
+```{r}
+model_4 <-glm(formula = held ~ race + employed + citizen + databases, family = 'binomial', data= police.data)
+summary(model_4)
+
+make_prediction(model_4, 0.5)
+plot_roc(model_4)
+```
+
+```{r}
+#dum <- police.data
+#dum$age<-ifelse(dum$age < 18,0,1)
+#dum$age<-ifelse(dum$age < 18,0,1)
+police.data$region<-ifelse(police.data$region == 'North',1,0)
+police.data$region<-ifelse(police.data$region == 'North',1,0)
+
+#model_4i <- glm(held ~  citizen + employed + race + race*age + databases, family = 'binomial', data= police.data)
+#model_4i <- glm(held ~  citizen + employed + race + race*region + as.factor(age) + databases, family = 'binomial', data= dum)
+model_4i <- glm(held ~  citizen + employed + race + race*region + as.factor(age) + databases, family = 'binomial', data= police.data)
+
+
+summary(model_4i)
+
+make_prediction(model_4i, 0.6)
+plot_roc(model_4i)
+```
+
+## Model Fitting Conclusion:
+  - race: always significant
+  - sex: always NOT significant
+  - prior.traffic: always NOT significant, regardless of transformation (i.e: use 0 for o and 1 for 1+)
+  - region: always NOT significant, regardless of transformation (i.e: group all regions that are NOT North into one level)
+  - employed: always significant
+  - citizen: always significant
+  - databases: always significant
+  - year: always NOT significant
+  - age: NOT significant is used as numerical variable / significant if use bining (<=18 | >18)
+  
+  
+
